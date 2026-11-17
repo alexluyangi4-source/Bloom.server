@@ -1,0 +1,48 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+from datetime import date, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from sms import send_sms
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+users_db = []
+
+class User(BaseModel):
+    name: str
+    phone: str
+    next_period: str
+
+@app.post("/register")
+def register(user: User):
+    users_db.append(user.dict())
+    return {"message": "Registered successfully"}
+
+def check_and_send_sms():
+    today = date.today()
+    for user in users_db:
+        next_p = date.fromisoformat(user["next_period"])
+        days_left = (next_p - today).days
+        
+        if days_left == 2:
+            msg = f"Habari {user['name']}! 🌸 Hedhi yako inatarajiwa baada ya siku 2. Jiandae! - Bloom with Alex"
+            send_sms(user["phone"], msg)
+            print(f"SMS imetumwa kwa {user['name']}")
+
+@app.on_event("startup")
+def start_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(check_and_send_sms, 'cron', hour=8, minute=0)
+    scheduler.start()
+
+@app.get("/")
+def health():
+    return {"status": "Server ya Bloom iko Live!"}
